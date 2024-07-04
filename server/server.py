@@ -51,10 +51,6 @@ mqtt_client.tls_insecure_set(False)
 
 mqtt_client.connect(MQTT_BROKER_URL, MQTT_BROKER_PORT, 60)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 def process_ppg_data():
     global ppg_data_list
     try:
@@ -88,6 +84,12 @@ def process_ppg_data():
 
     except Exception as e:
         print(f"Error processing PPG data: {e}")
+
+@socketio.on('reset_data')
+def handle_reset_data():
+    global ppg_data_list
+    print("Resetting PPG data...")
+    ppg_data_list = []
 
 if __name__ == '__main__':
     mqtt_client.loop_start()

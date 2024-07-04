@@ -10,18 +10,31 @@ const App = () => {
     heartRate: null
   });
 
+  const handleResetData = () => {
+    // Socket을 통해 Flask 서버로 초기화 요청
+    const socket = io('http://localhost:5000');
+    socket.emit('reset_data');
+    setHeartRateData({
+      timestamps: [],
+      filteredPPG: [],
+      ppgPeaks: [],
+      heartRate: null
+    });
+  };
+
   useEffect(() => {
     const socket = io('http://localhost:5000');
 
     socket.on('ppg_data', (data) => {
       console.log('Received PPG data:', data);
 
-      setHeartRateData({
-        timestamps: data.ts,
-        filteredPPG: data.filtered,
-        ppgPeaks: data.peaks,
+      // 새로운 데이터를 기존 데이터에 추가하여 업데이트합니다.
+      setHeartRateData(prevData => ({
+        timestamps: [...prevData.timestamps, ...data.ts],
+        filteredPPG: [...prevData.filteredPPG, ...data.filtered],
+        ppgPeaks: [...prevData.ppgPeaks, ...data.peaks],
         heartRate: data.heart_rate
-      });
+      }));
     });
 
     return () => {
@@ -57,10 +70,17 @@ const App = () => {
             {/* Scatter 컴포넌트를 사용하여 PPG 피크 표시 */}
             <Scatter data={createScatterData()} fill="green" shape="circle" />
             {/* Brush 컴포넌트를 사용하여 스크롤 가능 영역 설정 */}
-            <Brush dataKey="timestamp" height={30} stroke="#8884d8" />
+            <Brush
+              dataKey="timestamp"
+              height={30}
+              stroke="#8884d8"
+              startIndex={Math.max(0, heartRateData.timestamps.length - 120)}
+              domain={{ x: [heartRateData.timestamps[Math.max(0, heartRateData.timestamps.length - 120)], heartRateData.timestamps[heartRateData.timestamps.length - 1]] }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
+      <button onClick={handleResetData}>데이터 초기화</button>
     </div>
   );
 };
