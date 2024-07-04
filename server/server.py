@@ -1,10 +1,13 @@
+import csv
+from datetime import datetime
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import paho.mqtt.client as mqtt
 import ssl
 import json
-import biosppy.signals.ppg as ppg
 import numpy as np
+import os
+import biosppy.signals.ppg as ppg
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -23,7 +26,44 @@ mqtt_client = mqtt.Client()
 
 # 데이터를 저장할 리스트
 ppg_data_list = []
+additional_data_list = []
+csv_file_label = 'default'
 
+# CSV 파일 관리
+csv_file = None
+csv_writer = None
+
+# CSV 파일을 열고 데이터를 저장하는 함수
+def open_csv_file(label):
+    global csv_file, csv_writer
+
+    # 현재 시간을 기반으로 파일명 생성
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'csv/ppg_data_{label}_{timestamp}.csv'
+
+    # csv 디렉터리가 없으면 생성
+    if not os.path.exists('csv'):
+        os.makedirs('csv')
+
+    # 파일 열기
+    csv_file = open(filename, mode='a', newline='')
+    csv_writer = csv.writer(csv_file)
+
+    # 파일에 헤더 쓰기 (새로운 파일일 경우에만)
+    if os.path.getsize(filename) == 0:
+        csv_writer.writerow(['PPG Value'])
+
+    print(f"Opened CSV file: {filename}")
+
+# CSV 파일을 닫는 함수
+def close_csv_file():
+    global csv_file
+    if csv_file:
+        csv_file.close()
+        csv_file = None
+        print("Closed CSV file")
+
+# MQTT 연결이 수립되었을 때 실행되는 콜백 함수
 def on_connect(client, userdata, flags, rc):
     print(f"Connected with result code {rc}")
     if rc == 0:
@@ -31,28 +71,28 @@ def on_connect(client, userdata, flags, rc):
     else:
         print(f"Failed to connect, return code {rc}")
 
+# MQTT 메시지가 도착했을 때 실행되는 콜백 함수
 def on_message(client, userdata, msg):
+    global ppg_data_list
+
     data = msg.payload.decode()
     print(f"Received message: {data}")
 
-    # 데이터를 리스트에 추가
-    ppg_data_list.append(int(json.loads(data)['value']))  # 'value'를 int로 변환하여 추가
+    try:
+        value = int(json.loads(data)['value'])
+        ppg_data_list.append(value)
 
-    # 데이터가 일정 개수 이상일 때 처리 함수 호출
-    if len(ppg_data_list) >= 70:
-        process_ppg_data()
+        # 일정 개수 이상 데이터가 모이면 처리
+        if len(ppg_data_list) > 80:
+            process_ppg_data()
 
-mqtt_client.on_connect = on_connect
-mqtt_client.on_message = on_message
+    except Exception as e:
+        print(f"Error processing MQTT message: {e}")
 
-# TLS 설정
-mqtt_client.tls_set(ca_certs=CA_CERTS, certfile=CERTFILE, keyfile=KEYFILE, tls_version=ssl.PROTOCOL_TLSv1_2)
-mqtt_client.tls_insecure_set(False)
-
-mqtt_client.connect(MQTT_BROKER_URL, MQTT_BROKER_PORT, 60)
-
+# PPG 데이터를 처리하는 함수
 def process_ppg_data():
-    global ppg_data_list
+    global ppg_data_list, csv_file_label
+
     try:
         print(f"Processing {len(ppg_data_list)} PPG data points")
 
@@ -69,28 +109,66 @@ def process_ppg_data():
         else:
             heart_rate = None
 
+        # 클라이언트에게 데이터 전송
         response = {
             'ts': out['ts'].tolist(),
             'filtered': out['filtered'].tolist(),
             'peaks': out['peaks'].tolist(),
             'heart_rate': heart_rate
         }
-
-        # 클라이언트에게 데이터 전송
         socketio.emit('ppg_data', response)
 
+        # 추가 데이터 리스트에 데이터 추가
+        additional_data_list.extend(ppg_data_list)
+
         # 처리가 끝난 후 데이터 리스트 초기화
-        ppg_data_list = []
+        ppg_data_list.clear()
 
     except Exception as e:
         print(f"Error processing PPG data: {e}")
 
+# 클라이언트에서 데이터 초기화 요청이 왔을 때 실행되는 콜백 함수
 @socketio.on('reset_data')
-def handle_reset_data():
-    global ppg_data_list
-    print("Resetting PPG data...")
-    ppg_data_list = []
+def handle_reset_data(data):
+    global csv_file_label
 
+    print(f"Resetting PPG data with new label: {data['label']}")
+
+    # CSV 파일 닫기
+    close_csv_file()
+
+    # 추가 데이터를 CSV 파일에 추가
+    if additional_data_list:
+        try:
+            open_csv_file(csv_file_label)
+            csv_writer.writerows([[value] for value in additional_data_list])
+            print(f"Added {len(additional_data_list)} additional data points to CSV")
+        except Exception as e:
+            print(f"Error writing additional data to CSV: {e}")
+        finally:
+            close_csv_file()
+
+    # 추가 데이터 리스트 초기화
+    additional_data_list.clear()
+
+    # 새로운 레이블 설정
+    csv_file_label = data['label']
+
+# 메인 함수
 if __name__ == '__main__':
+    # MQTT 클라이언트 설정
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
+
+    # TLS 설정
+    mqtt_client.tls_set(ca_certs=CA_CERTS, certfile=CERTFILE, keyfile=KEYFILE, tls_version=ssl.PROTOCOL_TLSv1_2)
+    mqtt_client.tls_insecure_set(False)
+
+    # MQTT 브로커에 연결
+    mqtt_client.connect(MQTT_BROKER_URL, MQTT_BROKER_PORT, 60)
+
+    # MQTT 메시지 수신을 위한 루프 시작
     mqtt_client.loop_start()
+
+    # Flask 애플리케이션 실행 (SocketIO 포함)
     socketio.run(app, host='0.0.0.0', port=5000)

@@ -10,16 +10,19 @@ const App = () => {
     heartRate: null
   });
 
+  const [label, setLabel] = useState('');
+
   const handleResetData = () => {
     // Socket을 통해 Flask 서버로 초기화 요청
     const socket = io('http://localhost:5000');
-    socket.emit('reset_data');
+    socket.emit('reset_data', { label });
     setHeartRateData({
       timestamps: [],
       filteredPPG: [],
       ppgPeaks: [],
       heartRate: null
     });
+    setLabel('');  // 초기화 후 입력 필드 비우기
   };
 
   useEffect(() => {
@@ -80,7 +83,15 @@ const App = () => {
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <button onClick={handleResetData}>데이터 초기화</button>
+      <div>
+        <input
+          type="text"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="라벨을 입력하세요"
+        />
+        <button onClick={handleResetData}>데이터 초기화</button>
+      </div>
     </div>
   );
 };
