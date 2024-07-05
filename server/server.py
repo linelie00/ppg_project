@@ -86,6 +86,7 @@ def on_message(client, userdata, msg):
         red_value = int(payload['red'])
         ir_data_list.append(ir_value)
         red_data_list.append(red_value)
+        additional_data_list.extend([(ir_value, red_value)])
 
         # 일정 개수 이상 데이터가 모이면 처리
         if len(ir_data_list) > 80:
@@ -124,7 +125,7 @@ def process_ppg_data():
         socketio.emit('ppg_data', response)
 
         # 추가 데이터 리스트에 데이터 추가
-        additional_data_list.extend(zip(ir_data_list, red_data_list))
+        # additional_data_list.extend(zip(ir_data_list, red_data_list))
 
         # 처리가 끝난 후 데이터 리스트 초기화
         ir_data_list.clear()
@@ -156,6 +157,8 @@ def handle_reset_data(data):
 
     # 추가 데이터 리스트 초기화
     additional_data_list.clear()
+    ir_data_list.clear()
+    red_data_list.clear()
 
     # 새로운 레이블 설정
     csv_file_label = data['label']
