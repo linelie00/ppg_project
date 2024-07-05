@@ -8,6 +8,7 @@ import json
 import numpy as np
 import os
 import biosppy.signals.ppg as ppg
+import time
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -25,7 +26,8 @@ KEYFILE = './server/private.pem'
 mqtt_client = mqtt.Client()
 
 # 데이터를 저장할 리스트
-ppg_data_list = []
+ir_data_list = []
+red_data_list = []
 additional_data_list = []
 csv_file_label = 'default'
 
@@ -51,7 +53,7 @@ def open_csv_file(label):
 
     # 파일에 헤더 쓰기 (새로운 파일일 경우에만)
     if os.path.getsize(filename) == 0:
-        csv_writer.writerow(['PPG Value'])
+        csv_writer.writerow(['IR Value', 'Red Value'])
 
     print(f"Opened CSV file: {filename}")
 
@@ -73,17 +75,20 @@ def on_connect(client, userdata, flags, rc):
 
 # MQTT 메시지가 도착했을 때 실행되는 콜백 함수
 def on_message(client, userdata, msg):
-    global ppg_data_list
+    global ir_data_list, red_data_list
 
     data = msg.payload.decode()
     print(f"Received message: {data}")
 
     try:
-        value = int(json.loads(data)['value'])
-        ppg_data_list.append(value)
+        payload = json.loads(data)
+        ir_value = int(payload['ir'])
+        red_value = int(payload['red'])
+        ir_data_list.append(ir_value)
+        red_data_list.append(red_value)
 
         # 일정 개수 이상 데이터가 모이면 처리
-        if len(ppg_data_list) > 80:
+        if len(ir_data_list) > 80:
             process_ppg_data()
 
     except Exception as e:
@@ -91,13 +96,13 @@ def on_message(client, userdata, msg):
 
 # PPG 데이터를 처리하는 함수
 def process_ppg_data():
-    global ppg_data_list, csv_file_label
+    global ir_data_list, red_data_list, csv_file_label
 
     try:
-        print(f"Processing {len(ppg_data_list)} PPG data points")
+        print(f"Processing {len(ir_data_list)} IR data points")
 
         # 리스트를 numpy 배열로 변환
-        signal = np.array(ppg_data_list, dtype=np.float64)
+        signal = np.array(ir_data_list, dtype=np.float64)
 
         # 신호 처리
         out = ppg.ppg(signal=signal, sampling_rate=50., show=False)
@@ -119,10 +124,11 @@ def process_ppg_data():
         socketio.emit('ppg_data', response)
 
         # 추가 데이터 리스트에 데이터 추가
-        additional_data_list.extend(ppg_data_list)
+        additional_data_list.extend(zip(ir_data_list, red_data_list))
 
         # 처리가 끝난 후 데이터 리스트 초기화
-        ppg_data_list.clear()
+        ir_data_list.clear()
+        red_data_list.clear()
 
     except Exception as e:
         print(f"Error processing PPG data: {e}")
@@ -141,7 +147,7 @@ def handle_reset_data(data):
     if additional_data_list:
         try:
             open_csv_file(csv_file_label)
-            csv_writer.writerows([[value] for value in additional_data_list])
+            csv_writer.writerows(additional_data_list)
             print(f"Added {len(additional_data_list)} additional data points to CSV")
         except Exception as e:
             print(f"Error writing additional data to CSV: {e}")
