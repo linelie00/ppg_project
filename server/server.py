@@ -1,6 +1,6 @@
 import csv
 from datetime import datetime
-from flask import Flask, render_template
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 import paho.mqtt.client as mqtt
 import ssl
@@ -9,10 +9,12 @@ import numpy as np
 import os
 import biosppy.signals.ppg as ppg
 import time
+from flask_cors import CORS
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
 socketio = SocketIO(app, cors_allowed_origins='*')
+CORS(app)
 
 # MQTT 설정
 MQTT_BROKER_URL = 'msg01.cloudiot.ntruss.com'
@@ -162,6 +164,29 @@ def handle_reset_data(data):
 
     # 새로운 레이블 설정
     csv_file_label = data['label']
+
+# POST 요청을 받는 엔드포인트
+@app.route('/esp32Test', methods=['POST'])
+def receive_data():
+    try:
+        # JSON 데이터 수신 시도
+        data = request.get_json(silent=True)
+        
+        if data:
+            print('Received JSON data via HTTP POST:', data)
+        else:
+            # JSON 데이터가 아닌 경우 원시 데이터 수신
+            data = request.get_data(as_text=True)
+            print('Received raw data via HTTP POST:', data)
+        
+        # 여기서 데이터 처리 로직 추가
+        # 예를 들어, 필요한 데이터를 추출하거나 다른 작업을 수행할 수 있습니다.
+
+        return jsonify({'message': 'Data received successfully'})
+
+    except Exception as e:
+        print(f"Error receiving data via HTTP POST: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # 메인 함수
 if __name__ == '__main__':
