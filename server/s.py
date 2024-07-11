@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import numpy as np
+import os
 import biosppy.signals.ppg as ppg
 from flask_socketio import SocketIO, emit
 
@@ -13,6 +14,9 @@ CORS(app)
 
 # 데이터를 저장할 리스트
 ir_data_list = []
+red_data_list = []
+additional_data_list = []
+csv_file_label = 'default'
 
 # CSV 파일 관리
 csv_file = None
@@ -36,7 +40,7 @@ def open_csv_file(label):
 
     # 파일에 헤더 쓰기 (새로운 파일일 경우에만)
     if os.path.getsize(filename) == 0:
-        csv_writer.writerow(['IR Value'])
+        csv_writer.writerow(['IR Value', 'Red Value'])
 
     print(f"Opened CSV file: {filename}")
 
@@ -50,7 +54,7 @@ def close_csv_file():
 
 # PPG 데이터를 처리하는 함수
 def process_ppg_data():
-    global ir_data_list
+    global ir_data_list, red_data_list
 
     try:
         print(f"Processing {len(ir_data_list)} IR data points")
@@ -80,9 +84,39 @@ def process_ppg_data():
 
         # 추가 데이터 리스트 초기화
         ir_data_list.clear()
+        red_data_list.clear()
 
     except Exception as e:
         print(f"Error processing PPG data: {e}")
+
+# 클라이언트에서 데이터 초기화 요청이 왔을 때 실행되는 콜백 함수
+@socketio.on('reset_data')
+def handle_reset_data(data):
+    global csv_file_label
+
+    print(f"Resetting PPG data with new label: {data['label']}")
+
+    # CSV 파일 닫기
+    close_csv_file()
+
+    # 추가 데이터를 CSV 파일에 추가
+    if additional_data_list:
+        try:
+            open_csv_file(csv_file_label)
+            csv_writer.writerows(additional_data_list)
+            print(f"Added {len(additional_data_list)} additional data points to CSV")
+        except Exception as e:
+            print(f"Error writing additional data to CSV: {e}")
+        finally:
+            close_csv_file()
+
+    # 추가 데이터 리스트 초기화
+    additional_data_list.clear()
+    ir_data_list.clear()
+    red_data_list.clear()
+
+    # 새로운 레이블 설정
+    csv_file_label = data['label']
 
 # POST 요청을 받는 엔드포인트
 @app.route('/esp32Test', methods=['POST'])
@@ -92,11 +126,14 @@ def receive_data():
         data = request.get_json(silent=True)
         print(f"Received data: {data}")
         
-        if data and 'ir' in data and isinstance(data['ir'], list):
+        if data and 'ir' in data and 'red' in data and isinstance(data['ir'], list) and isinstance(data['red'], list):
             ir_values = data['ir']
+            red_values = data['red']
             
-            for value in ir_values:
-                ir_data_list.append(int(value))
+            for ir_value, red_value in zip(ir_values, red_values):
+                ir_data_list.append(int(ir_value))
+                red_data_list.append(int(red_value))
+                additional_data_list.append((int(ir_value), int(red_value)))
         
         # 데이터가 일정 개수 이상 모이면 처리
         if len(ir_data_list) > 80:

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, Scatter, CartesianGrid, XAxis, YAxis, Legend, ResponsiveContainer, Tooltip, Brush } from 'recharts';
 import { io } from 'socket.io-client';
-import './App.css';
 
 const App = () => {
   const [heartRateData, setHeartRateData] = useState({
