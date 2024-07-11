@@ -169,7 +169,7 @@ def receive_data():
                 red_data_list.append(int(red_value))
                 additional_data_list.append((int(ir_value), int(red_value)))
         
-        if len(ir_data_list) > 80:
+        if len(ir_data_list) >= 1400:
             process_ppg_data()
 
         return jsonify({'message': 'Data received successfully'})
