@@ -36,3 +36,20 @@
     transform: rotate(360deg);
   }
 }
+
+.App input {
+  padding: 10px;
+  margin: 10px;
+  width: 200px;
+  height: 60px;
+  font-size: 20px;
+  box-sizing: border-box;
+}
+
+.App button {
+  padding: 10px;
+  margin: 10px;
+  width: 200px;
+  height: 60px;
+  font-size: 20px;
+}

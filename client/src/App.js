@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, Scatter, CartesianGrid, XAxis, YAxis, Legend, ResponsiveContainer, Tooltip, Brush } from 'recharts';
 import { io } from 'socket.io-client';
+import './App.css';
 
 const App = () => {
   const [heartRateData, setHeartRateData] = useState({
@@ -11,12 +12,23 @@ const App = () => {
     spo2: null
   });
 
-  const [label, setLabel] = useState('');
+  const [label, setLabel] = useState({
+    age: '',
+    species: '',
+    weight: '',
+    disease: '',
+  });
+
+  const [isLabelSet, setIsLabelSet] = useState(false);
 
   const handleResetData = () => {
-    // Socket을 통해 Flask 서버로 초기화 요청
-    const socket = io('http://localhost:5000');
-    socket.emit('reset_data', { label });
+    setIsLabelSet(true);  // 라벨이 설정됨을 표시
+  };
+
+  const handleSaveData = () => {
+    // Socket을 통해 Flask 서버로 데이터 저장 요청
+    const socket = io('http://223.130.142.8:5000');
+    socket.emit('save_data', label);
     setHeartRateData({
       timestamps: [],
       filteredPPG: [],
@@ -24,11 +36,17 @@ const App = () => {
       heartRate: null,
       spo2: null
     });
-    setLabel('');  // 초기화 후 입력 필드 비우기
-  };
+    setLabel({
+      age: '',
+      species: '',
+      weight: '',
+      disease: ''
+    });
+    setIsLabelSet(false);  // 라벨이 설정되지 않음을 표시
+  }
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const socket = io('http://223.130.142.8:5000');
 
     socket.on('ppg_data', (data) => {
       console.log('Received PPG data:', data);
@@ -58,8 +76,9 @@ const App = () => {
   };
 
   return (
-    <div>
+    <div className='App'>
       <h1>실시간 심박수 그래프</h1>
+      <h2>{label.age}/{label.species}/{label.weight}/{label.disease}</h2>
       <h2>심박수: {heartRateData.heartRate} bpm</h2>
       <h2>산소포화도: {heartRateData.spo2} %</h2>
       <div style={{ width: '1400px', height: '400px' }}>
@@ -88,13 +107,38 @@ const App = () => {
         </ResponsiveContainer>
       </div>
       <div>
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="라벨을 입력하세요"
-        />
-        <button onClick={handleResetData}>데이터 초기화</button>
+        {!isLabelSet && (
+          <>
+            <input
+              type="text"
+              value={label.age}
+              onChange={(e) => setLabel({ ...label, age: e.target.value })}
+              placeholder="나이"
+            />
+            <input
+              type="text"
+              value={label.species}
+              onChange={(e) => setLabel({ ...label, species: e.target.value })}
+              placeholder="종"
+            />
+            <input
+              type="text"
+              value={label.weight}
+              onChange={(e) => setLabel({ ...label, weight: e.target.value })}
+              placeholder="체중"
+            />
+            <input
+              type="text"
+              value={label.disease}
+              onChange={(e) => setLabel({ ...label, disease: e.target.value })}
+              placeholder="질병"
+            />
+            <button onClick={handleResetData}>라벨 입력</button>
+          </>
+        )}
+        {isLabelSet && (
+          <button onClick={handleSaveData}>데이터 저장</button>
+        )}
       </div>
     </div>
   );

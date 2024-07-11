@@ -29,8 +29,8 @@ def open_csv_file(label):
     global csv_file, csv_writer
 
     # 현재 시간을 기반으로 파일명 생성
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f'csv/ppg_data_{label}_{timestamp}.csv'
+    timestamp = datetime.now().strftime('%y%m%d-%H-%M')
+    filename = f'csv/{label}_{timestamp}.csv'
 
     # csv 디렉터리가 없으면 생성
     if not os.path.exists('csv'):
@@ -92,7 +92,7 @@ def calculate_spo2(ir_data, red_data):
     ir_rms_ac = calculate_rms(bandpass_filter(ac_component_ir, 0.5, 5, sampling_frequency))
     ratio = (red_rms_ac / np.mean(dc_component_red)) / (ir_rms_ac / np.mean(dc_component_ir))
 
-    spo2 = 100 - 5 * ratio  # Adjust the coefficient as per the calibration
+    spo2 = 100 - 0.1 * ratio  # Adjust the coefficient as per the calibration
     return spo2
 
 # PPG 데이터를 처리하는 함수
@@ -134,7 +134,27 @@ def process_ppg_data():
 def handle_reset_data(data):
     global csv_file_label
 
-    print(f"Resetting PPG data with new label: {data['label']}")
+    age = data.get('age', 'unknown')
+    species = data.get('species', 'unknown')
+    weight = data.get('weight', 'unknown')
+    disease = data.get('disease', 'unknown')
+
+    csv_file_label = f"{age}_{species}_{weight}_{disease}"
+
+    print(f"Resetting PPG data with new label: {csv_file_label}")
+
+@socketio.on('save_data')
+def handle_save_data(data):
+    global csv_file_label
+
+    age = data.get('age', 'unknown')
+    species = data.get('species', 'unknown')
+    weight = data.get('weight', 'unknown')
+    disease = data.get('disease', 'unknown')
+
+    csv_file_label = f"{age}_{species}_{weight}_{disease}"
+
+    print(f"Resetting PPG data with new label: {csv_file_label}")
 
     close_csv_file()
 
@@ -152,8 +172,6 @@ def handle_reset_data(data):
     ir_data_list.clear()
     red_data_list.clear()
 
-    csv_file_label = data['label']
-
 @app.route('/esp32Test', methods=['POST'])
 def receive_data():
     try:
@@ -169,7 +187,7 @@ def receive_data():
                 red_data_list.append(int(red_value))
                 additional_data_list.append((int(ir_value), int(red_value)))
         
-        if len(ir_data_list) >= 1400:
+        if len(ir_data_list) > 80:
             process_ppg_data()
 
         return jsonify({'message': 'Data received successfully'})
