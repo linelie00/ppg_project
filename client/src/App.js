@@ -7,7 +7,8 @@ const App = () => {
     timestamps: [],
     filteredPPG: [],
     ppgPeaks: [],
-    heartRate: null
+    heartRate: null,
+    spo2: null
   });
 
   const [label, setLabel] = useState('');
@@ -20,7 +21,8 @@ const App = () => {
       timestamps: [],
       filteredPPG: [],
       ppgPeaks: [],
-      heartRate: null
+      heartRate: null,
+      spo2: null
     });
     setLabel('');  // 초기화 후 입력 필드 비우기
   };
@@ -36,7 +38,8 @@ const App = () => {
         timestamps: [...prevData.timestamps, ...data.ts],
         filteredPPG: [...prevData.filteredPPG, ...data.filtered],
         ppgPeaks: [...prevData.ppgPeaks, ...data.peaks],
-        heartRate: data.heart_rate
+        heartRate: data.heart_rate,
+        spo2: data.spo2
       }));
     });
 
@@ -58,6 +61,7 @@ const App = () => {
     <div>
       <h1>실시간 심박수 그래프</h1>
       <h2>심박수: {heartRateData.heartRate} bpm</h2>
+      <h2>산소포화도: {heartRateData.spo2} %</h2>
       <div style={{ width: '1400px', height: '400px' }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart

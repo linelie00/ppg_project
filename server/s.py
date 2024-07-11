@@ -6,6 +6,8 @@ import numpy as np
 import os
 import biosppy.signals.ppg as ppg
 from flask_socketio import SocketIO, emit
+import math
+from scipy.signal import butter, filtfilt
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -52,6 +54,47 @@ def close_csv_file():
         csv_file = None
         print("Closed CSV file")
 
+# High-pass filter function to remove the DC component
+def highpass_filter(data, cutoff_frequency, sampling_frequency):
+    nyquist_frequency = 0.5 * sampling_frequency
+    normal_cutoff = cutoff_frequency / nyquist_frequency
+    b, a = butter(1, normal_cutoff, btype='high', analog=False)
+    y = filtfilt(b, a, data)
+    return y
+
+# Band-pass filter function to remove noise
+def bandpass_filter(signal, lowcut, highcut, fs, order=5):
+    nyquist = 0.5 * fs
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    b, a = butter(order, [low, high], btype='band')
+    y = filtfilt(b, a, signal)
+    return y
+
+# RMS calculation function
+def calculate_rms(data):
+    square_sum = sum([i**2 for i in data])
+    mean = square_sum / len(data)
+    rms = math.sqrt(mean)
+    return rms
+
+# SpO2 calculation function
+def calculate_spo2(ir_data, red_data):
+    sampling_frequency = 50  # Assume a sampling frequency of 50 Hz
+    cutoff_frequency = 0.5   # Adjust the cutoff frequency as needed
+    
+    ac_component_ir = highpass_filter(ir_data, cutoff_frequency, sampling_frequency)
+    dc_component_ir = ir_data - ac_component_ir
+    ac_component_red = highpass_filter(red_data, cutoff_frequency, sampling_frequency)
+    dc_component_red = red_data - ac_component_red
+
+    red_rms_ac = calculate_rms(bandpass_filter(ac_component_red, 0.5, 5, sampling_frequency))
+    ir_rms_ac = calculate_rms(bandpass_filter(ac_component_ir, 0.5, 5, sampling_frequency))
+    ratio = (red_rms_ac / np.mean(dc_component_red)) / (ir_rms_ac / np.mean(dc_component_ir))
+
+    spo2 = 100 - 5 * ratio  # Adjust the coefficient as per the calibration
+    return spo2
+
 # PPG 데이터를 처리하는 함수
 def process_ppg_data():
     global ir_data_list, red_data_list
@@ -59,47 +102,42 @@ def process_ppg_data():
     try:
         print(f"Processing {len(ir_data_list)} IR data points")
 
-        # 리스트를 numpy 배열로 변환
+        # 심박수 계산
         signal = np.array(ir_data_list, dtype=np.float64)
-
-        # 신호 처리
         out = ppg.ppg(signal=signal, sampling_rate=50., show=False)
 
-        # 피크가 2개 이상인 경우에만 심박수 계산
         if len(out['peaks']) >= 2:
-            # 피크 간 시간 간격을 계산하여 심박수 추정
-            diff = (out['peaks'][1] - out['peaks'][0]) / 50.0  # 시간 간격 계산
-            heart_rate = 60.0 / diff  # 심박수 계산
+            diff = (out['peaks'][1] - out['peaks'][0]) / 50.0
+            heart_rate = 60.0 / diff
         else:
             heart_rate = None
 
-        # 클라이언트에게 데이터 전송
+        # 산소포화도 계산
+        spo2 = calculate_spo2(np.array(ir_data_list), np.array(red_data_list))
+
         response = {
             'ts': out['ts'].tolist(),
             'filtered': out['filtered'].tolist(),
             'peaks': out['peaks'].tolist(),
-            'heart_rate': heart_rate
+            'heart_rate': heart_rate,
+            'spo2': spo2
         }
         socketio.emit('ppg_data', response)
 
-        # 추가 데이터 리스트 초기화
         ir_data_list.clear()
         red_data_list.clear()
 
     except Exception as e:
         print(f"Error processing PPG data: {e}")
 
-# 클라이언트에서 데이터 초기화 요청이 왔을 때 실행되는 콜백 함수
 @socketio.on('reset_data')
 def handle_reset_data(data):
     global csv_file_label
 
     print(f"Resetting PPG data with new label: {data['label']}")
 
-    # CSV 파일 닫기
     close_csv_file()
 
-    # 추가 데이터를 CSV 파일에 추가
     if additional_data_list:
         try:
             open_csv_file(csv_file_label)
@@ -110,19 +148,15 @@ def handle_reset_data(data):
         finally:
             close_csv_file()
 
-    # 추가 데이터 리스트 초기화
     additional_data_list.clear()
     ir_data_list.clear()
     red_data_list.clear()
 
-    # 새로운 레이블 설정
     csv_file_label = data['label']
 
-# POST 요청을 받는 엔드포인트
 @app.route('/esp32Test', methods=['POST'])
 def receive_data():
     try:
-        # JSON 데이터 수신 시도
         data = request.get_json(silent=True)
         print(f"Received data: {data}")
         
@@ -135,7 +169,6 @@ def receive_data():
                 red_data_list.append(int(red_value))
                 additional_data_list.append((int(ir_value), int(red_value)))
         
-        # 데이터가 일정 개수 이상 모이면 처리
         if len(ir_data_list) > 80:
             process_ppg_data()
 
@@ -145,6 +178,5 @@ def receive_data():
         print(f"Error receiving data via HTTP POST: {e}")
         return jsonify({'error': str(e)}), 500
 
-# 메인 함수
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000)
