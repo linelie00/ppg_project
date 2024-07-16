@@ -20,9 +20,12 @@ const App = () => {
   });
 
   const [isLabelSet, setIsLabelSet] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleResetData = () => {
     setIsLabelSet(true);  // 라벨이 설정됨을 표시
+    const socket = io('http://223.130.142.8:5000');
+    socket.emit('reset_data', label);
   };
 
   const handleSaveData = () => {
@@ -59,6 +62,25 @@ const App = () => {
         heartRate: data.heart_rate,
         spo2: data.spo2
       }));
+
+      // 데이터가 정상적으로 수신되면 에러 메시지 초기화
+      setErrorMessage('');
+    });
+
+    socket.on('request_retake', (message) => {
+      console.log("retake");
+      setErrorMessage(message.message);
+    });
+
+    socket.on('reset_server', (data) => {
+      console.log("reset_server");
+      setLabel({
+        age: data.age,
+        species: data.species,
+        weight: data.weight,
+        disease: data.disease
+      });
+      setIsLabelSet(true);
     });
 
     return () => {
@@ -81,7 +103,8 @@ const App = () => {
       <h2>{label.age}/{label.species}/{label.weight}/{label.disease}</h2>
       <h2>심박수: {heartRateData.heartRate} bpm</h2>
       <h2>산소포화도: {heartRateData.spo2} %</h2>
-      <div style={{ width: '1400px', height: '400px' }}>
+      {errorMessage && <p style={{ color: 'red', fontSize: '24px', fontWeight: '700' }}>{errorMessage}</p>}
+      <div style={{width: '90%', height: '400px'}}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={heartRateData.timestamps.map((timestamp, index) => ({ timestamp, filteredPPG: heartRateData.filteredPPG[index] }))}

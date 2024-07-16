@@ -92,7 +92,7 @@ def calculate_spo2(ir_data, red_data):
     ir_rms_ac = calculate_rms(bandpass_filter(ac_component_ir, 0.5, 5, sampling_frequency))
     ratio = (red_rms_ac / np.mean(dc_component_red)) / (ir_rms_ac / np.mean(dc_component_ir))
 
-    spo2 = 100 - 0.1 * ratio  # Adjust the coefficient as per the calibration
+    spo2 = 110 - 25 * ratio  # Adjust the coefficient as per the calibration
     return spo2
 
 # PPG 데이터를 처리하는 함수
@@ -108,12 +108,12 @@ def process_ppg_data():
 
         if len(out['peaks']) >= 2:
             diff = (out['peaks'][1] - out['peaks'][0]) / 50.0
-            heart_rate = 60.0 / diff
+            heart_rate = int(60.0 / diff)
         else:
             heart_rate = None
 
         # 산소포화도 계산
-        spo2 = calculate_spo2(np.array(ir_data_list), np.array(red_data_list))
+        spo2 = int(calculate_spo2(np.array(ir_data_list), np.array(red_data_list)))
 
         response = {
             'ts': out['ts'].tolist(),
@@ -132,16 +132,7 @@ def process_ppg_data():
 
 @socketio.on('reset_data')
 def handle_reset_data(data):
-    global csv_file_label
-
-    age = data.get('age', 'unknown')
-    species = data.get('species', 'unknown')
-    weight = data.get('weight', 'unknown')
-    disease = data.get('disease', 'unknown')
-
-    csv_file_label = f"{age}_{species}_{weight}_{disease}"
-
-    print(f"Resetting PPG data with new label: {csv_file_label}")
+    socketio.emit('reset_server', data)
 
 @socketio.on('save_data')
 def handle_save_data(data):
@@ -181,7 +172,7 @@ def receive_data():
         if data and 'ir' in data and 'red' in data and isinstance(data['ir'], list) and isinstance(data['red'], list):
             ir_values = data['ir']
             red_values = data['red']
-            
+
             for ir_value, red_value in zip(ir_values, red_values):
                 ir_data_list.append(int(ir_value))
                 red_data_list.append(int(red_value))
@@ -189,6 +180,11 @@ def receive_data():
         
         if len(ir_data_list) > 80:
             process_ppg_data()
+
+        # Check if values are within the specified range
+        if any(10 <= val <= 10000 for val in ir_values) or any(10 <= val <= 10000 for val in red_values):
+            socketio.emit('request_retake', {'message': 'Please retake the measurement, data values are out of range.'})
+            return jsonify({'message': 'Please retake the measurement, data values are out of range.'}), 400
 
         return jsonify({'message': 'Data received successfully'})
 
