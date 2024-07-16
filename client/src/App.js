@@ -99,10 +99,10 @@ const App = () => {
 
   return (
     <div className='App'>
-      <h1>실시간 심박수 그래프</h1>
+      <h1>Real-time heart rate graph</h1>
       <h2>{label.age}/{label.species}/{label.weight}/{label.disease}</h2>
-      <h2>심박수: {heartRateData.heartRate} bpm</h2>
-      <h2>산소포화도: {heartRateData.spo2} %</h2>
+      <h2>heart rate: {heartRateData.heartRate} bpm</h2>
+      <h2>spo2: {heartRateData.spo2} %</h2>
       {errorMessage && <p style={{ color: 'red', fontSize: '24px', fontWeight: '700' }}>{errorMessage}</p>}
       <div style={{width: '90%', height: '400px'}}>
         <ResponsiveContainer width="100%" height="100%">
@@ -111,8 +111,8 @@ const App = () => {
             margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="timestamp" label={{ value: '시간', position: 'insideBottomRight', offset: 0 }} />
-            <YAxis label={{ value: '진폭', angle: -90, position: 'insideLeft' }} />
+            <XAxis dataKey="timestamp" label={{ value: 'Time', position: 'insideBottomRight', offset: 0 }} />
+            <YAxis label={{ value: 'Amplitude', angle: -90, position: 'insideLeft' }} />
             <Tooltip />
             <Legend />
             <Line type="monotone" dataKey="filteredPPG" stroke="blue" dot={false} />
@@ -136,31 +136,31 @@ const App = () => {
               type="text"
               value={label.age}
               onChange={(e) => setLabel({ ...label, age: e.target.value })}
-              placeholder="나이"
+              placeholder="age"
             />
             <input
               type="text"
               value={label.species}
               onChange={(e) => setLabel({ ...label, species: e.target.value })}
-              placeholder="종"
+              placeholder="species"
             />
             <input
               type="text"
               value={label.weight}
               onChange={(e) => setLabel({ ...label, weight: e.target.value })}
-              placeholder="체중"
+              placeholder="weight"
             />
             <input
               type="text"
               value={label.disease}
               onChange={(e) => setLabel({ ...label, disease: e.target.value })}
-              placeholder="질병"
+              placeholder="disease"
             />
-            <button onClick={handleResetData}>라벨 입력</button>
+            <button onClick={handleResetData}>submit</button>
           </>
         )}
         {isLabelSet && (
-          <button onClick={handleSaveData}>데이터 저장</button>
+          <button onClick={handleSaveData}>save</button>
         )}
       </div>
     </div>

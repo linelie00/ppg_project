@@ -114,9 +114,11 @@ def process_ppg_data():
 
         # 산소포화도 계산
         spo2 = int(calculate_spo2(np.array(ir_data_list), np.array(red_data_list)))
+        if spo2 > 100:
+            spo2 = 100
 
         response = {
-            'ts': out['ts'].tolist(),
+            'ts': round(out['ts'].tolist(),2),
             'filtered': out['filtered'].tolist(),
             'peaks': out['peaks'].tolist(),
             'heart_rate': heart_rate,
