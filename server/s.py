@@ -8,6 +8,7 @@ import biosppy.signals.ppg as ppg
 from flask_socketio import SocketIO, emit
 import math
 from scipy.signal import butter, filtfilt
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -90,9 +91,13 @@ def calculate_spo2(ir_data, red_data):
 
     red_rms_ac = calculate_rms(bandpass_filter(ac_component_red, 0.5, 5, sampling_frequency))
     ir_rms_ac = calculate_rms(bandpass_filter(ac_component_ir, 0.5, 5, sampling_frequency))
-    ratio = (red_rms_ac / np.mean(dc_component_red)) / (ir_rms_ac / np.mean(dc_component_ir))
+    ratio = (red_rms_ac / dc_component_red) / (ir_rms_ac / dc_component_ir)
 
-    spo2 = 110 - 25 * ratio  # Adjust the coefficient as per the calibration
+    result = 110 -  15 * ratio  # Adjust the coefficient as per the calibration
+    min=0
+    for i in result:
+        min+=i
+    spo2=min/len(result)
     return spo2
 
 # PPG 데이터를 처리하는 함수
@@ -101,6 +106,7 @@ def process_ppg_data():
 
     try:
         print(f"Processing {len(ir_data_list)} IR data points")
+        print(f"time: {datetime.now()}")
 
         # 심박수 계산
         signal = np.array(ir_data_list, dtype=np.float64)
@@ -118,7 +124,7 @@ def process_ppg_data():
             spo2 = 100
 
         response = {
-            'ts': round(out['ts'].tolist(),2),
+            'ts': out['ts'].tolist(),
             'filtered': out['filtered'].tolist(),
             'peaks': out['peaks'].tolist(),
             'heart_rate': heart_rate,
@@ -130,6 +136,8 @@ def process_ppg_data():
         red_data_list.clear()
 
     except Exception as e:
+        ir_data_list.clear()
+        red_data_list.clear()
         print(f"Error processing PPG data: {e}")
 
 @socketio.on('reset_data')
@@ -138,6 +146,7 @@ def handle_reset_data(data):
 
 @socketio.on('save_data')
 def handle_save_data(data):
+    socketio.emit('save_server', data)
     global csv_file_label
 
     age = data.get('age', 'unknown')
@@ -179,14 +188,12 @@ def receive_data():
                 ir_data_list.append(int(ir_value))
                 red_data_list.append(int(red_value))
                 additional_data_list.append((int(ir_value), int(red_value)))
-        
         if len(ir_data_list) > 80:
             process_ppg_data()
 
-        # Check if values are within the specified range
-        if any(10 <= val <= 10000 for val in ir_values) or any(10 <= val <= 10000 for val in red_values):
-            socketio.emit('request_retake', {'message': 'Please retake the measurement, data values are out of range.'})
-            return jsonify({'message': 'Please retake the measurement, data values are out of range.'}), 400
+        if any(10 <= val <= 1000 for val in ir_values) or any(10 <= val <= 1000 for val in red_values):
+                socketio.emit('request_retake', {'message': 'Please retake the measurement, data values are out of range.'})
+                return jsonify({'message': 'Please retake the measurement, data values are out of range.'}), 400
 
         return jsonify({'message': 'Data received successfully'})
 

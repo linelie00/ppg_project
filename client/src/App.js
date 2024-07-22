@@ -70,10 +70,13 @@ const App = () => {
     socket.on('request_retake', (message) => {
       console.log("retake");
       setErrorMessage(message.message);
+      setHeartRateData(prevState => ({
+        ...prevState,
+        spo2: "-"
+    }));
     });
 
     socket.on('reset_server', (data) => {
-      console.log("reset_server");
       setLabel({
         age: data.age,
         species: data.species,
@@ -81,6 +84,16 @@ const App = () => {
         disease: data.disease
       });
       setIsLabelSet(true);
+    });
+
+    socket.on('save_server', (data) => {
+      setLabel({
+        age: '',
+        species: '',
+        weight: '',
+        disease: ''
+      });
+      setIsLabelSet(false);
     });
 
     return () => {
